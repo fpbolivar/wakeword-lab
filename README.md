@@ -52,13 +52,14 @@ streamlit run ui_app.py
 
 ## Using the WakeWord Lab UI 🖥️
 
-Launch the app (`streamlit run ui_app.py`) and open it in your browser. You will see five tabs:
+Launch the app (`streamlit run ui_app.py`) and open it in your browser. You will see six tabs:
 
 | Tab | What it does |
 |-----|--------------|
 | 🎤 Phrase Lab | Test how your wake phrase sounds before training |
 | 📦 Data Setup | Download background audio and prepare the training dataset |
 | 🏋️ Training Lab | Configure settings, pick a preset, and run training |
+| 🧬 Personal Voice | Record clips with your microphone, import WAVs, run readiness checks, and train a speaker-specific verifier |
 | 📁 Outputs | Download your trained `.onnx` / `.tflite` files and export a publish ZIP |
 | 🩺 Health | Verify all required tools, folders, and packages are installed |
 
@@ -183,7 +184,7 @@ UI features:
 - ⚡ One-click training presets (Quick Smoke, Balanced, High Robustness)
 - 🎧 Generate preview audio button
 - ⏳ Stage-based loading/progress bars for long operations
-- 🧬 Optional personal voice verifier using your own recorded clips
+- 🧬 Dedicated Personal Voice tab with microphone capture, WAV import, autofill paths, and readiness checks
 - 📦 Output browser with direct downloads for `.onnx`, `.tflite`, and `.wav`
 - 🗂️ One-click publish ZIP export for sharing your app
 - 🩺 Health tab with environment and dependency diagnostics
@@ -205,12 +206,35 @@ Recommended recording format:
 - one phrase per clip
 - quiet room, varied speaking speed, varied distance from mic
 
-Then in the 🏋️ Training Lab:
+Suggested folder structure:
 
-1. Train the base model first
-2. Scroll to `🧬 Personal Voice Verifier`
-3. Paste the positive and negative clip folder paths
-4. Click `Train Personal Voice Verifier`
+```text
+personal_voice/
+├── positive/
+│   ├── take_01.wav
+│   ├── take_02.wav
+│   └── take_03.wav
+└── negative/
+  ├── other_01.wav
+  ├── other_02.wav
+  └── other_03.wav
+```
+
+Recording tips:
+
+- keep clips short, around 1 to 2 seconds each
+- use the same mic/device you plan to deploy with if possible
+- vary speed, tone, and distance a little across takes
+- do not mix multiple speakers into the `positive/` folder
+- avoid MP3 when possible; WAV is preferred
+
+Then in the 🧬 Personal Voice tab:
+
+1. Train the base model first in the `🏋️ Training` tab
+2. Click `✨ Autofill Example Paths` or enter your own positive/negative folders
+3. Either record clips with your microphone or import existing WAV files
+4. Check the readiness counters for positive clips, negative clips, and base model status
+5. Click `🧬 Train Personal Voice Verifier`
 
 Output:
 

@@ -181,6 +181,41 @@ def parse_destination_paths(text: str) -> list[Path]:
     return destinations
 
 
+def resolve_user_path(path_text: str) -> Path:
+    path = Path(path_text).expanduser()
+    if not path.is_absolute():
+        path = (APP_DIR / path).resolve()
+    return path
+
+
+def count_wav_files(path_text: str) -> int:
+    if not path_text.strip():
+        return 0
+    path = resolve_user_path(path_text)
+    if not path.exists():
+        return 0
+    return len(list(path.rglob("*.wav")))
+
+
+def save_audio_blob(audio_file, destination_dir: Path, prefix: str) -> Path:
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    suffix = Path(getattr(audio_file, "name", "recording.wav")).suffix or ".wav"
+    target = destination_dir / f"{prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{suffix}"
+    target.write_bytes(audio_file.getvalue())
+    return target
+
+
+def save_uploaded_files(uploaded_files: list, destination_dir: Path, prefix: str) -> int:
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    saved = 0
+    for index, uploaded in enumerate(uploaded_files, start=1):
+        suffix = Path(getattr(uploaded, "name", "clip.wav")).suffix or ".wav"
+        target = destination_dir / f"{prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{index:02d}{suffix}"
+        target.write_bytes(uploaded.getvalue())
+        saved += 1
+    return saved
+
+
 def copy_files_to_destination(files: list[Path], destination: Path) -> int:
     destination.mkdir(parents=True, exist_ok=True)
     copied = 0
@@ -490,31 +525,91 @@ def training_lab(app: VoiceTrainerApp) -> None:
             st.error(str(exc))
             st.code(traceback.format_exc(), language="text")
 
-    st.markdown("---")
-    st.subheader("🧬 Personal Voice Verifier")
+    st.info("Need speaker-specific tuning? Use the `🧬 Personal Voice` tab to record clips, import WAVs, run readiness checks, and train a personal verifier.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def personal_voice_lab(app: VoiceTrainerApp) -> None:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("🧬 Personal Voice")
     st.caption(
-        "Optional: train a speaker-specific verifier using your own recorded clips so the model is more personalized to your voice."
-    )
-    st.info(
-        "Record 3 to 10 WAV clips of yourself saying the wake phrase into one folder, and 3 to 10 WAV clips of yourself saying other speech into another folder. "
-        "Mono 16 kHz WAV is recommended."
+        "Record or import your own voice clips, check readiness, and train a speaker-specific verifier for more personalized wake-word behavior."
     )
 
-    v1, v2 = st.columns(2)
-    with v1:
+    example_root = APP_DIR / "personal_voice"
+    example_positive = example_root / "positive"
+    example_negative = example_root / "negative"
+
+    top1, top2 = st.columns([1, 2])
+    with top1:
+        if st.button("✨ Autofill Example Paths", use_container_width=True):
+            st.session_state.positive_voice_dir = str(example_positive)
+            st.session_state.negative_voice_dir = str(example_negative)
+            if not st.session_state.get("verifier_output_name"):
+                st.session_state.verifier_output_name = f"{st.session_state.get('model_name', 'wakeword')}_verifier.pkl"
+            st.rerun()
+    with top2:
+        st.caption("Creates a ready-to-use example layout under the app folder: `personal_voice/positive` and `personal_voice/negative`.")
+
+    with st.expander("🎙️ Recording Guide", expanded=True):
+        g1, g2 = st.columns(2)
+        with g1:
+            st.markdown(
+                "\n".join(
+                    [
+                        "**Good recording habits**",
+                        "- Record 3 to 10 clips for `positive/` and 3 to 10 clips for `negative/`",
+                        "- Keep each clip short: about 1 to 2 seconds",
+                        "- Use the same microphone you expect to use later if possible",
+                        "- Record in a quiet room first, then add a few natural variations",
+                        "- Change speed, tone, and distance slightly between takes",
+                    ]
+                )
+            )
+        with g2:
+            st.markdown(
+                "\n".join(
+                    [
+                        "**Avoid these issues**",
+                        "- Do not put multiple phrases in one clip",
+                        "- Do not trim so tightly that the phrase gets cut off",
+                        "- Do not mix other speakers into the positive folder",
+                        "- Do not use background music or TV noise if you can avoid it",
+                        "- Do not use MP3 if you can save WAV directly",
+                    ]
+                )
+            )
+
+        st.caption("Suggested folder structure")
+        st.code(
+            "personal_voice/\n"
+            "  positive/\n"
+            "    take_01.wav\n"
+            "    take_02.wav\n"
+            "    take_03.wav\n"
+            "  negative/\n"
+            "    other_01.wav\n"
+            "    other_02.wav\n"
+            "    other_03.wav",
+            language="text",
+        )
+
+    path_col1, path_col2 = st.columns(2)
+    with path_col1:
         st.text_input(
             "🎤 Positive voice clips folder",
             key="positive_voice_dir",
             help="Folder containing WAV files of your voice saying the wake phrase.",
         )
-    with v2:
+    with path_col2:
         st.text_input(
             "🗣️ Negative voice clips folder",
             key="negative_voice_dir",
             help="Folder containing WAV files of your voice saying anything except the wake phrase.",
         )
 
-    default_verifier_name = f"{model_name.strip() or 'wakeword'}_verifier.pkl"
+    default_verifier_name = f"{st.session_state.get('model_name', 'wakeword').strip() or 'wakeword'}_verifier.pkl"
     if not st.session_state.get("verifier_output_name"):
         st.session_state.verifier_output_name = default_verifier_name
     st.text_input(
@@ -523,12 +618,87 @@ def training_lab(app: VoiceTrainerApp) -> None:
         help="Saved into the output folder unless you also configured final output destinations.",
     )
 
-    if st.button("🧬 Train Personal Voice Verifier", use_container_width=True):
+    positive_dir_text = st.session_state.get("positive_voice_dir", "")
+    negative_dir_text = st.session_state.get("negative_voice_dir", "")
+    positive_count = count_wav_files(positive_dir_text)
+    negative_count = count_wav_files(negative_dir_text)
+    base_model_path = OUTPUT_DIR / f"{(st.session_state.get('model_name', '').strip() or 'wakeword')}.onnx"
+
+    st.write("📊 Readiness Check")
+    r1, r2, r3 = st.columns(3)
+    r1.metric("🎤 Positive clips", positive_count)
+    r2.metric("🗣️ Negative clips", negative_count)
+    r3.metric("🧠 Base model", "Ready" if base_model_path.exists() else "Missing")
+    if positive_count < 3 or negative_count < 3 or not base_model_path.exists():
+        st.warning("Recommended minimum: 3 positive clips, 3 negative clips, and a trained base ONNX model in the output folder.")
+    else:
+        st.success("Ready to train a personalized verifier.")
+
+    st.markdown("---")
+    st.subheader("🎙️ Record With Your Microphone")
+    mic1, mic2 = st.columns(2)
+    with mic1:
+        positive_audio = st.audio_input("Record a positive clip", key="positive_audio_input")
+        if st.button("💾 Save Positive Recording", use_container_width=True):
+            if not positive_dir_text.strip():
+                st.error("Set a positive clips folder first.")
+            elif positive_audio is None:
+                st.error("Record a positive clip first.")
+            else:
+                saved_path = save_audio_blob(positive_audio, resolve_user_path(positive_dir_text), "positive")
+                st.success(f"Saved: {saved_path}")
+    with mic2:
+        negative_audio = st.audio_input("Record a negative clip", key="negative_audio_input")
+        if st.button("💾 Save Negative Recording", use_container_width=True):
+            if not negative_dir_text.strip():
+                st.error("Set a negative clips folder first.")
+            elif negative_audio is None:
+                st.error("Record a negative clip first.")
+            else:
+                saved_path = save_audio_blob(negative_audio, resolve_user_path(negative_dir_text), "negative")
+                st.success(f"Saved: {saved_path}")
+
+    st.markdown("---")
+    st.subheader("📥 Import Existing WAV Files")
+    up1, up2 = st.columns(2)
+    with up1:
+        positive_uploads = st.file_uploader(
+            "Upload positive WAV clips",
+            type=["wav"],
+            accept_multiple_files=True,
+            key="positive_wav_uploads",
+        )
+        if st.button("📥 Import Positive WAVs", use_container_width=True):
+            if not positive_dir_text.strip():
+                st.error("Set a positive clips folder first.")
+            elif not positive_uploads:
+                st.error("Choose one or more positive WAV files first.")
+            else:
+                saved = save_uploaded_files(list(positive_uploads), resolve_user_path(positive_dir_text), "positive")
+                st.success(f"Imported {saved} positive clip(s).")
+    with up2:
+        negative_uploads = st.file_uploader(
+            "Upload negative WAV clips",
+            type=["wav"],
+            accept_multiple_files=True,
+            key="negative_wav_uploads",
+        )
+        if st.button("📥 Import Negative WAVs", use_container_width=True):
+            if not negative_dir_text.strip():
+                st.error("Set a negative clips folder first.")
+            elif not negative_uploads:
+                st.error("Choose one or more negative WAV files first.")
+            else:
+                saved = save_uploaded_files(list(negative_uploads), resolve_user_path(negative_dir_text), "negative")
+                st.success(f"Imported {saved} negative clip(s).")
+
+    st.markdown("---")
+    if st.button("🧬 Train Personal Voice Verifier", type="primary", use_container_width=True):
         try:
             verifier_output = app.train_personal_verifier(
-                model_name=model_name.strip(),
-                positive_reference_dir=st.session_state.get("positive_voice_dir", ""),
-                negative_reference_dir=st.session_state.get("negative_voice_dir", ""),
+                model_name=st.session_state.get("model_name", "").strip(),
+                positive_reference_dir=positive_dir_text,
+                negative_reference_dir=negative_dir_text,
                 output_path=OUTPUT_DIR / st.session_state.get("verifier_output_name", default_verifier_name),
             )
             st.success(f"Personal verifier created: {verifier_output}")
@@ -673,7 +843,7 @@ def main() -> None:
 
     sidebar(app)
 
-    t1, t2, t3, t4, t5 = st.tabs(["🎤 Phrase Lab", "📦 Data Setup", "🏋️ Training", "📁 Outputs", "🩺 Health"])
+    t1, t2, t3, t4, t5, t6 = st.tabs(["🎤 Phrase Lab", "📦 Data Setup", "🏋️ Training", "🧬 Personal Voice", "📁 Outputs", "🩺 Health"])
     with t1:
         phrase_lab(app)
     with t2:
@@ -681,8 +851,10 @@ def main() -> None:
     with t3:
         training_lab(app)
     with t4:
-        outputs_panel()
+        personal_voice_lab(app)
     with t5:
+        outputs_panel()
+    with t6:
         health_panel(app)
 
 
