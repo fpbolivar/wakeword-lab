@@ -323,7 +323,7 @@ class VoiceTrainerApp:
         env = os.environ.copy()
         piper_path = str(self.piper_repo.resolve())
         env["PYTHONPATH"] = (
-            piper_path if not env.get("PYTHONPATH") else f"{piper_path}:{env['PYTHONPATH']}"
+            piper_path if not env.get("PYTHONPATH") else f"{piper_path}{os.pathsep}{env['PYTHONPATH']}"
         )
 
         stage_items = [

@@ -13,9 +13,29 @@ This app is designed to be easy to publish and easy for others to run.
 
 ## Launch In 30 Seconds
 
+### macOS or Linux
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install -r requirements.txt
+streamlit run ui_app.py
+```
+
+### Windows (PowerShell)
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+streamlit run ui_app.py
+```
+
+### Windows (Command Prompt)
+
+```bat
+py -3 -m venv .venv
+.venv\Scripts\activate.bat
 python -m pip install -r requirements.txt
 streamlit run ui_app.py
 ```
@@ -57,11 +77,63 @@ wakeword-lab/
 
 ## Quick Start 🚀
 
+## Platform Setup
+
+### Windows
+
+1. Install Python 3.11+ from python.org
+2. Install Git for Windows
+3. Install Git LFS:
+
+```powershell
+winget install GitHub.GitLFS
+git lfs install
+```
+
+### macOS
+
+1. Install Python 3.11+ (Homebrew or python.org)
+2. Install Git LFS:
+
+```bash
+brew install git-lfs
+git lfs install
+```
+
+### Linux (Ubuntu/Debian)
+
+1. Install Python 3.11+, git, and pip
+2. Install Git LFS:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git-lfs
+git lfs install
+```
+
 ### 1) Create and activate a virtual environment
+
+macOS/Linux:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+
+Windows PowerShell:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+```
+
+Windows Command Prompt:
+
+```bat
+py -3 -m venv .venv
+.venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 ```
 
@@ -84,6 +156,12 @@ wakeword-lab --help
 
 ```bash
 streamlit run ui_app.py
+```
+
+If `streamlit` is not found on Windows, use:
+
+```powershell
+python -m streamlit run ui_app.py
 ```
 
 UI features:
@@ -169,7 +247,9 @@ python train_voice.py train --model-name hey_att_la --target-phrases hey_att_la 
 
 - Python 3.11 recommended
 - `git-lfs` required for MIT RIR assets
+- Windows install example: `winget install GitHub.GitLFS`
 - macOS install example: `brew install git-lfs`
+- Linux (Debian/Ubuntu) install example: `sudo apt-get install -y git-lfs`
 - First run may be long because it downloads large files
 
 ## Attribution and Data Licensing 📜
