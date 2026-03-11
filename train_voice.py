@@ -31,6 +31,48 @@ class VoiceTrainerApp:
     FALSE_PENALTY_MIN = 100
     FALSE_PENALTY_MAX = 5000
 
+    @classmethod
+    def detect_available_devices(cls) -> list[dict]:
+        """Return available compute devices with labels and descriptions.
+
+        Each entry has keys: id (str passed to train()), label (display name),
+        desc (short explanation shown to the user).
+        """
+        devices: list[dict] = [
+            {
+                "id": "cpu",
+                "label": "🖥️ CPU",
+                "desc": "Always available. Works everywhere. Slowest option.",
+            }
+        ]
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                try:
+                    gpu_name = torch.cuda.get_device_name(0)
+                except Exception:
+                    gpu_name = "CUDA GPU"
+                devices.append(
+                    {
+                        "id": "cuda:0",
+                        "label": f"⚡ CUDA GPU — {gpu_name}",
+                        "desc": "NVIDIA GPU via CUDA. Fastest for large training runs.",
+                    }
+                )
+
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                devices.append(
+                    {
+                        "id": "mps",
+                        "label": "🍎 Mac GPU (MPS)",
+                        "desc": "Apple Silicon unified GPU. Faster than CPU on M1/M2/M3/M4 Macs.",
+                    }
+                )
+        except Exception:
+            pass
+        return devices
+
     def __init__(self, app_dir: Path) -> None:
         self.app_dir = app_dir
         self.third_party_dir = app_dir / "third_party"
@@ -103,6 +145,23 @@ class VoiceTrainerApp:
 
         # Fix argparse store_true defaults that should be boolean values.
         updated = updated.replace('default="False"', 'default=False')
+
+        # Patch device selection to support MPS and the WAKEWORD_DEVICE env var.
+        old_device_line = "        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')"
+        new_device_block = (
+            "        _ww_dev = os.environ.get(\"WAKEWORD_DEVICE\", \"auto\")\n"
+            "        if _ww_dev == \"auto\":\n"
+            "            if torch.cuda.is_available():\n"
+            "                self.device = torch.device('cuda:0')\n"
+            "            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():\n"
+            "                self.device = torch.device('mps')\n"
+            "            else:\n"
+            "                self.device = torch.device('cpu')\n"
+            "        else:\n"
+            "            self.device = torch.device(_ww_dev)"
+        )
+        if old_device_line in updated:
+            updated = updated.replace(old_device_line, new_device_block)
 
         # Avoid DataLoader multiprocessing pickling failures on macOS.
         old_block = """        n_cpus = os.cpu_count()\n        if n_cpus is None:\n            n_cpus = 1\n        else:\n            n_cpus = n_cpus//2\n        X_train = torch.utils.data.DataLoader(IterDataset(batch_generator),\n                                              batch_size=None, num_workers=n_cpus, prefetch_factor=16)\n"""
@@ -271,6 +330,7 @@ class VoiceTrainerApp:
         n_samples: int,
         steps: int,
         false_activation_penalty: int,
+        device: str = "auto",
         progress_callback: Callable[[float, str], None] | None = None,
     ) -> None:
         import yaml
@@ -325,6 +385,15 @@ class VoiceTrainerApp:
         env["PYTHONPATH"] = (
             piper_path if not env.get("PYTHONPATH") else f"{piper_path}{os.pathsep}{env['PYTHONPATH']}"
         )
+
+        # Pass compute device choice to the openWakeWord training subprocess.
+        env["WAKEWORD_DEVICE"] = device
+        if device == "mps":
+            # Required for ops that don't have native MPS kernels.
+            env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+        elif device == "cpu":
+            # Prevent accidental CUDA use even if the driver is present.
+            env["CUDA_VISIBLE_DEVICES"] = ""
 
         stage_items = [
             ("--generate_clips", "Generating synthetic clips"),

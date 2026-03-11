@@ -119,6 +119,8 @@ def init_state() -> None:
         st.session_state.steps = 3000
     if "false_penalty" not in st.session_state:
         st.session_state.false_penalty = 600
+    if "device_choice" not in st.session_state:
+        st.session_state.device_choice = "auto"
 
 
 def preset_config(name: str) -> dict[str, int | str]:
@@ -168,6 +170,31 @@ def sidebar(app: VoiceTrainerApp) -> None:
     st.sidebar.write(f"⚙️ steps: {app.STEPS_MIN:,} – {app.STEPS_MAX:,}")
     st.sidebar.write(f"🔇 false penalty: {app.FALSE_PENALTY_MIN:,} – {app.FALSE_PENALTY_MAX:,}")
 
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("⚡ Compute Device")
+    devices = app.detect_available_devices()
+    device_ids = ["auto"] + [d["id"] for d in devices]
+    device_labels = ["🤖 Auto (recommended)"] + [d["label"] for d in devices]
+
+    # Show what "auto" will actually pick
+    auto_pick = "mps" if any(d["id"] == "mps" for d in devices) else \
+                "cuda:0" if any(d["id"] == "cuda:0" for d in devices) else "cpu"
+    auto_hint = next((d["label"] for d in devices if d["id"] == auto_pick), "🖥️ CPU")
+    st.sidebar.caption(f"Auto will use: {auto_hint}")
+
+    selected_label = st.sidebar.radio(
+        "Select training device",
+        device_labels,
+        key="device_label_radio",
+        help="CPU works everywhere. MPS is fastest on Apple Silicon Macs. CUDA is fastest on NVIDIA GPUs.",
+    )
+    chosen_index = device_labels.index(selected_label)
+    st.session_state.device_choice = device_ids[chosen_index]
+
+    # Show a description for the selected device
+    if chosen_index > 0:
+        st.sidebar.caption(devices[chosen_index - 1]["desc"])
+
 
 def health_panel(app: VoiceTrainerApp) -> None:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -187,6 +214,12 @@ def health_panel(app: VoiceTrainerApp) -> None:
             st.success(f"✅ {label}: found")
         else:
             st.warning(f"⚠️ {label}: missing — expected at {path}")
+
+    st.markdown("---")
+    st.write("⚡ Detected compute devices:")
+    detected = app.detect_available_devices()
+    for d in detected:
+        st.info(f"{d['label']} — {d['desc']}")
 
     st.markdown("---")
     import_checks = [
@@ -361,6 +394,7 @@ def training_lab(app: VoiceTrainerApp) -> None:
                 n_samples=n_samples,
                 steps=steps,
                 false_activation_penalty=false_penalty,
+                device=st.session_state.get("device_choice", "auto"),
                 progress_callback=cb,
             )
             status.success("Training complete")
