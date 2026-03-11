@@ -198,14 +198,14 @@ UI features:
 ### Test your wake phrase sound
 
 ```bash
-python train_voice.py test-phrase --target-word hey_att_la
+python train_voice.py test-phrase --target-word hey_seere
 ```
 
 Output file:
 
 - `output/test_generation.wav`
 
-If pronunciation is not right, make it more phonetic (example: `hey_at_luh`).
+If pronunciation is not right, make it more phonetic (example: `hey_seeri`).
 
 ### 4) Prepare assets and data
 
@@ -225,8 +225,8 @@ python train_voice.py prepare-data --include-streaming-sets
 
 ```bash
 python train_voice.py train \
-  --model-name hey_att_la \
-  --target-phrases hey_att_la hey_at_luh hey_at_lah hey_aht_la \
+  --model-name hey_seere \
+  --target-phrases hey_seere hey_seeri hey_seeree hey_syree \
   --n-samples 5000 \
   --steps 3000 \
   --false-activation-penalty 600
@@ -240,8 +240,8 @@ Training argument bounds:
 
 Output files:
 
-- `output/hey_att_la.onnx`
-- `output/hey_att_la.tflite`
+- `output/hey_seere.onnx`
+- `output/hey_seere.tflite`
 
 ## Suggested Presets 🧪
 
@@ -251,19 +251,19 @@ Output files:
 Quick smoke test:
 
 ```bash
-python train_voice.py train --model-name hey_att_la --target-phrases hey_att_la --n-samples 1000 --steps 500 --false-activation-penalty 300
+python train_voice.py train --model-name hey_seere --target-phrases hey_seere --n-samples 1000 --steps 500 --false-activation-penalty 300
 ```
 
 Balanced personal model:
 
 ```bash
-python train_voice.py train --model-name hey_att_la --target-phrases hey_att_la hey_at_luh hey_at_lah hey_aht_la --n-samples 15000 --steps 10000 --false-activation-penalty 900
+python train_voice.py train --model-name hey_seere --target-phrases hey_seere hey_seeri hey_seeree hey_syree --n-samples 15000 --steps 10000 --false-activation-penalty 900
 ```
 
 High robustness model:
 
 ```bash
-python train_voice.py train --model-name hey_att_la --target-phrases hey_att_la hey_at_luh hey_at_lah hey_aht_la --n-samples 50000 --steps 25000 --false-activation-penalty 1600
+python train_voice.py train --model-name hey_seere --target-phrases hey_seere hey_seeri hey_seeree hey_syree --n-samples 50000 --steps 25000 --false-activation-penalty 1600
 ```
 
 ## Requirements and Notes 🧩

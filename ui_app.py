@@ -110,9 +110,9 @@ def apply_custom_style() -> None:
 
 def init_state() -> None:
     if "phrases_text" not in st.session_state:
-        st.session_state.phrases_text = "hey_att_la"
+        st.session_state.phrases_text = "hey_seere"
     if "model_name" not in st.session_state:
-        st.session_state.model_name = "hey_att_la"
+        st.session_state.model_name = "hey_seere"
     if "n_samples" not in st.session_state:
         st.session_state.n_samples = 5000
     if "steps" not in st.session_state:
@@ -127,19 +127,19 @@ def preset_config(name: str) -> dict[str, int | str]:
             "n_samples": 1000,
             "steps": 500,
             "false_penalty": 300,
-            "phrases_text": "hey_att_la",
+            "phrases_text": "hey_seere",
         },
         "⚖️ Balanced": {
             "n_samples": 15000,
             "steps": 10000,
             "false_penalty": 900,
-            "phrases_text": "hey_att_la\nhey_at_luh\nhey_at_lah\nhey_aht_la",
+            "phrases_text": "hey_seere\nhey_seeri\nhey_seeree\nhey_syree",
         },
         "🔒 High Robustness": {
             "n_samples": 50000,
             "steps": 25000,
             "false_penalty": 1600,
-            "phrases_text": "hey_att_la\nhey_at_luh\nhey_at_lah\nhey_aht_la",
+            "phrases_text": "hey_seere\nhey_seeri\nhey_seeree\nhey_syree",
         },
     }
     return presets[name]
@@ -218,8 +218,8 @@ def phrase_lab(app: VoiceTrainerApp) -> None:
 
     target_word = st.text_input(
         "🎤 Target phrase",
-        value="hey_att_la",
-        help="Use phonetic spelling with underscores. e.g. 'hey_att_luh' or 'hey_aht_la'. Adjust until the preview sounds natural.",
+        value="hey_seere",
+        help="Use phonetic spelling with underscores. e.g. 'hey_seeri' or 'hey_syree'. Adjust until the preview sounds natural.",
     )
     generate = st.button("🔊 Generate Preview Audio", type="primary", use_container_width=True)
 
@@ -298,7 +298,7 @@ def training_lab(app: VoiceTrainerApp) -> None:
         model_name = st.text_input(
             "🏷️ Model name",
             key="model_name",
-            help="Output files will be named after this. Use lowercase with underscores, e.g. hey_att_la",
+            help="Output files will be named after this. Use lowercase with underscores, e.g. hey_seere",
         )
         n_samples = st.slider(
             "📊 Synthetic sample count",
