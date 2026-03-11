@@ -31,6 +31,80 @@ class VoiceTrainerApp:
     FALSE_PENALTY_MIN = 100
     FALSE_PENALTY_MAX = 5000
 
+    @staticmethod
+    def estimate_training_time(
+        n_samples: int,
+        steps: int,
+        n_phrases: int,
+        device: str,
+    ) -> dict:
+        """Return a human-readable time estimate dict for the full training pipeline.
+
+        Keys returned:
+          clip_gen_sec  – TTS clip generation (CPU-bound, piper)
+          feature_sec   – Feature extraction / augmentation
+          train_sec     – Model training loop
+          convert_sec   – ONNX → TFLite conversion (fixed ~30 s)
+          total_sec     – Sum of all stages
+          label         – Short human-readable string e.g. "~4 min 30 sec"
+          breakdown     – List of (stage_name, human_label) for display
+        """
+        # -------------------------------------------------------------------
+        # Empirical base rates measured on an M2 MacBook Pro (MPS/CPU similar
+        # for these workloads because piper and feature extraction are CPU-only).
+        # Device speed factors apply to the Torch training loop only.
+        # -------------------------------------------------------------------
+        SEC_PER_CLIP = 0.12          # piper TTS generation per clip (batch-assisted)
+        SEC_PER_FEATURE = 0.0015     # feature extraction per sample (augmentation)
+        SEC_PER_STEP_CPU = 0.022     # training loop per step on CPU
+        SEC_PER_STEP_CUDA = 0.006    # training loop per step on CUDA GPU
+        SEC_PER_STEP_MPS = 0.010     # training loop per step on Apple MPS
+        CONVERT_SEC = 30.0           # onnx2tf conversion (roughly fixed)
+
+        phrase_factor = 1.0 + (max(1, n_phrases) - 1) * 0.15
+        total_clips = n_samples * phrase_factor
+
+        clip_gen_sec = total_clips * SEC_PER_CLIP
+        feature_sec = n_samples * SEC_PER_FEATURE * 8  # ~8 augmentations per sample
+
+        dev = device.lower()
+        if "cuda" in dev:
+            sec_per_step = SEC_PER_STEP_CUDA
+        elif dev == "mps":
+            sec_per_step = SEC_PER_STEP_MPS
+        else:
+            sec_per_step = SEC_PER_STEP_CPU
+
+        train_sec = steps * sec_per_step
+        total_sec = clip_gen_sec + feature_sec + train_sec + CONVERT_SEC
+
+        def _fmt(secs: float) -> str:
+            secs = max(1, int(secs))
+            if secs < 60:
+                return f"~{secs} sec"
+            minutes, s = divmod(secs, 60)
+            if minutes < 60:
+                return f"~{minutes} min {s} sec" if s else f"~{minutes} min"
+            hours, m = divmod(minutes, 60)
+            return f"~{hours} hr {m} min" if m else f"~{hours} hr"
+
+        breakdown = [
+            ("🎙️ Clip generation", _fmt(clip_gen_sec)),
+            ("🔬 Feature extraction", _fmt(feature_sec)),
+            ("🏋️ Model training", _fmt(train_sec)),
+            ("📦 ONNX → TFLite", _fmt(CONVERT_SEC)),
+        ]
+
+        return {
+            "clip_gen_sec": clip_gen_sec,
+            "feature_sec": feature_sec,
+            "train_sec": train_sec,
+            "convert_sec": CONVERT_SEC,
+            "total_sec": total_sec,
+            "label": _fmt(total_sec),
+            "breakdown": breakdown,
+        }
+
     @classmethod
     def detect_available_devices(cls) -> list[dict]:
         """Return available compute devices with labels and descriptions.
@@ -427,6 +501,63 @@ class VoiceTrainerApp:
         print(f"Created model: {tflite_file}")
         if progress_callback:
             progress_callback(1.0, "Training complete")
+
+    def train_personal_verifier(
+        self,
+        model_name: str,
+        positive_reference_dir: str | Path,
+        negative_reference_dir: str | Path,
+        output_path: str | Path | None = None,
+    ) -> Path:
+        self.ensure_dirs()
+        self.ensure_openwakeword()
+
+        from openwakeword.custom_verifier_model import train_custom_verifier
+
+        positive_dir = Path(positive_reference_dir).expanduser()
+        negative_dir = Path(negative_reference_dir).expanduser()
+        if not positive_dir.is_absolute():
+            positive_dir = (self.app_dir / positive_dir).resolve()
+        if not negative_dir.is_absolute():
+            negative_dir = (self.app_dir / negative_dir).resolve()
+
+        if not positive_dir.exists():
+            raise FileNotFoundError(f"Positive reference folder not found: {positive_dir}")
+        if not negative_dir.exists():
+            raise FileNotFoundError(f"Negative reference folder not found: {negative_dir}")
+
+        positive_clips = sorted(str(path) for path in positive_dir.rglob("*.wav"))
+        negative_clips = sorted(str(path) for path in negative_dir.rglob("*.wav"))
+        if not positive_clips:
+            raise ValueError("No .wav files found in the positive reference folder.")
+        if not negative_clips:
+            raise ValueError("No .wav files found in the negative reference folder.")
+
+        base_model = Path(model_name).expanduser()
+        if not base_model.exists():
+            candidate = self.output_dir / f"{model_name}.onnx"
+            if candidate.exists():
+                base_model = candidate
+            else:
+                raise FileNotFoundError(
+                    f"Base model not found. Expected {candidate} or an explicit ONNX path."
+                )
+
+        if output_path is None:
+            verifier_output = self.output_dir / f"{base_model.stem}_verifier.pkl"
+        else:
+            verifier_output = Path(output_path).expanduser()
+            if not verifier_output.is_absolute():
+                verifier_output = (self.app_dir / verifier_output).resolve()
+
+        verifier_output.parent.mkdir(parents=True, exist_ok=True)
+        train_custom_verifier(
+            positive_reference_clips=positive_clips,
+            negative_reference_clips=negative_clips,
+            output_path=str(verifier_output),
+            model_name=str(base_model),
+        )
+        return verifier_output
 
     def _validate_training_inputs(
         self,

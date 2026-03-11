@@ -183,9 +183,40 @@ UI features:
 - ⚡ One-click training presets (Quick Smoke, Balanced, High Robustness)
 - 🎧 Generate preview audio button
 - ⏳ Stage-based loading/progress bars for long operations
+- 🧬 Optional personal voice verifier using your own recorded clips
 - 📦 Output browser with direct downloads for `.onnx`, `.tflite`, and `.wav`
 - 🗂️ One-click publish ZIP export for sharing your app
 - 🩺 Health tab with environment and dependency diagnostics
+
+### 2.6) Optional: Personalize It With Your Own Voice
+
+WakeWord Lab can also train a speaker-specific verifier so the wake word works better for one person.
+This is useful if you want the model to respond mainly to your voice instead of general voices.
+
+Record two folders of WAV files:
+
+- `positive/`: 3 to 10 short clips of you saying the wake phrase
+- `negative/`: 3 to 10 short clips of you saying anything else
+
+Recommended recording format:
+
+- mono WAV
+- 16 kHz sample rate
+- one phrase per clip
+- quiet room, varied speaking speed, varied distance from mic
+
+Then in the 🏋️ Training Lab:
+
+1. Train the base model first
+2. Scroll to `🧬 Personal Voice Verifier`
+3. Paste the positive and negative clip folder paths
+4. Click `Train Personal Voice Verifier`
+
+Output:
+
+- `output/<model_name>_verifier.pkl`
+
+This verifier is meant to be used together with the base wake-word model, not instead of it.
 
 ---
 

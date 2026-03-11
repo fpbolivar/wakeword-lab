@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import shutil
 import traceback
 import zipfile
 from datetime import datetime
@@ -121,6 +122,16 @@ def init_state() -> None:
         st.session_state.false_penalty = 600
     if "device_choice" not in st.session_state:
         st.session_state.device_choice = "auto"
+    if "output_destinations_text" not in st.session_state:
+        st.session_state.output_destinations_text = ""
+    if "auto_copy_outputs" not in st.session_state:
+        st.session_state.auto_copy_outputs = False
+    if "positive_voice_dir" not in st.session_state:
+        st.session_state.positive_voice_dir = ""
+    if "negative_voice_dir" not in st.session_state:
+        st.session_state.negative_voice_dir = ""
+    if "verifier_output_name" not in st.session_state:
+        st.session_state.verifier_output_name = ""
 
 
 def preset_config(name: str) -> dict[str, int | str]:
@@ -154,6 +165,30 @@ def parse_phrases(text: str) -> list[str]:
         if phrase and phrase not in phrases:
             phrases.append(phrase)
     return phrases
+
+
+def parse_destination_paths(text: str) -> list[Path]:
+    destinations: list[Path] = []
+    for raw in text.splitlines():
+        entry = raw.strip()
+        if not entry:
+            continue
+        path = Path(entry).expanduser()
+        if not path.is_absolute():
+            path = (APP_DIR / path).resolve()
+        if path not in destinations:
+            destinations.append(path)
+    return destinations
+
+
+def copy_files_to_destination(files: list[Path], destination: Path) -> int:
+    destination.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for src in files:
+        if src.exists() and src.is_file():
+            shutil.copy2(src, destination / src.name)
+            copied += 1
+    return copied
 
 
 def sidebar(app: VoiceTrainerApp) -> None:
@@ -195,6 +230,20 @@ def sidebar(app: VoiceTrainerApp) -> None:
     if chosen_index > 0:
         st.sidebar.caption(devices[chosen_index - 1]["desc"])
 
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📌 Final Output Destinations")
+    st.sidebar.text_area(
+        "Optional copy destinations (one path per line)",
+        key="output_destinations_text",
+        height=100,
+        help="After training, model files can be copied to these folders. Relative paths are resolved from the app folder.",
+    )
+    st.sidebar.checkbox(
+        "Auto-copy final model files after training",
+        key="auto_copy_outputs",
+        help="If enabled, .onnx/.tflite files are copied to destination folders automatically when training finishes.",
+    )
+
 
 def health_panel(app: VoiceTrainerApp) -> None:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -226,6 +275,7 @@ def health_panel(app: VoiceTrainerApp) -> None:
         ("streamlit", "Streamlit web UI framework"),
         ("numpy", "Numerical computing"),
         ("scipy", "Signal processing"),
+        ("sklearn", "Verifier model training"),
         ("yaml", "Config file parsing"),
         ("librosa", "Audio analysis"),
         ("soundfile", "WAV file I/O"),
@@ -373,6 +423,24 @@ def training_lab(app: VoiceTrainerApp) -> None:
     else:
         st.warning("Add at least one phrase variant.")
 
+    # ── Live time estimate ──────────────────────────────────────────────────
+    device_choice = st.session_state.get("device_choice", "auto")
+    est = app.estimate_training_time(
+        n_samples=n_samples,
+        steps=steps,
+        n_phrases=max(1, len(phrases)),
+        device=device_choice,
+    )
+    with st.expander(f"⏱️ Estimated total time: **{est['label']}**", expanded=True):
+        cols = st.columns(len(est["breakdown"]))
+        for col, (stage, duration) in zip(cols, est["breakdown"]):
+            col.metric(stage, duration)
+        st.caption(
+            "Estimates are based on average runtimes on an M2 MacBook Pro. "
+            "Your actual time may vary depending on hardware and background load."
+        )
+    # ───────────────────────────────────────────────────────────────────────
+
     run_training = st.button("🚀 Train Model", type="primary", use_container_width=True)
     if run_training:
         if not phrases:
@@ -399,8 +467,80 @@ def training_lab(app: VoiceTrainerApp) -> None:
             )
             status.success("Training complete")
             st.success("Model files are ready in the output folder.")
+
+            destinations = parse_destination_paths(st.session_state.get("output_destinations_text", ""))
+            if st.session_state.get("auto_copy_outputs", False) and destinations:
+                model_base = model_name.strip()
+                export_files = [
+                    OUTPUT_DIR / f"{model_base}.onnx",
+                    OUTPUT_DIR / f"{model_base}.tflite",
+                    OUTPUT_DIR / f"{model_base}_float16.tflite",
+                ]
+                export_files = [p for p in export_files if p.exists()]
+                if export_files:
+                    st.info("Copying final model files to destination folders...")
+                    for dest in destinations:
+                        copied_count = copy_files_to_destination(export_files, dest)
+                        if copied_count:
+                            st.success(f"Copied {copied_count} file(s) to: {dest}")
+                        else:
+                            st.warning(f"No model files found to copy for destination: {dest}")
         except Exception as exc:
             status.error("Training failed")
+            st.error(str(exc))
+            st.code(traceback.format_exc(), language="text")
+
+    st.markdown("---")
+    st.subheader("🧬 Personal Voice Verifier")
+    st.caption(
+        "Optional: train a speaker-specific verifier using your own recorded clips so the model is more personalized to your voice."
+    )
+    st.info(
+        "Record 3 to 10 WAV clips of yourself saying the wake phrase into one folder, and 3 to 10 WAV clips of yourself saying other speech into another folder. "
+        "Mono 16 kHz WAV is recommended."
+    )
+
+    v1, v2 = st.columns(2)
+    with v1:
+        st.text_input(
+            "🎤 Positive voice clips folder",
+            key="positive_voice_dir",
+            help="Folder containing WAV files of your voice saying the wake phrase.",
+        )
+    with v2:
+        st.text_input(
+            "🗣️ Negative voice clips folder",
+            key="negative_voice_dir",
+            help="Folder containing WAV files of your voice saying anything except the wake phrase.",
+        )
+
+    default_verifier_name = f"{model_name.strip() or 'wakeword'}_verifier.pkl"
+    if not st.session_state.get("verifier_output_name"):
+        st.session_state.verifier_output_name = default_verifier_name
+    st.text_input(
+        "📄 Verifier output filename",
+        key="verifier_output_name",
+        help="Saved into the output folder unless you also configured final output destinations.",
+    )
+
+    if st.button("🧬 Train Personal Voice Verifier", use_container_width=True):
+        try:
+            verifier_output = app.train_personal_verifier(
+                model_name=model_name.strip(),
+                positive_reference_dir=st.session_state.get("positive_voice_dir", ""),
+                negative_reference_dir=st.session_state.get("negative_voice_dir", ""),
+                output_path=OUTPUT_DIR / st.session_state.get("verifier_output_name", default_verifier_name),
+            )
+            st.success(f"Personal verifier created: {verifier_output}")
+
+            destinations = parse_destination_paths(st.session_state.get("output_destinations_text", ""))
+            if st.session_state.get("auto_copy_outputs", False) and destinations:
+                for dest in destinations:
+                    copied_count = copy_files_to_destination([verifier_output], dest)
+                    if copied_count:
+                        st.success(f"Copied personalized verifier to: {dest}")
+        except Exception as exc:
+            st.error("Personal verifier training failed")
             st.error(str(exc))
             st.code(traceback.format_exc(), language="text")
 
@@ -432,6 +572,8 @@ def build_publish_zip() -> bytes:
                 zf.write(model_file, arcname=model_file.relative_to(APP_DIR))
             for model_file in OUTPUT_DIR.glob("*.tflite"):
                 zf.write(model_file, arcname=model_file.relative_to(APP_DIR))
+            for model_file in OUTPUT_DIR.glob("*.pkl"):
+                zf.write(model_file, arcname=model_file.relative_to(APP_DIR))
 
     buf.seek(0)
     return buf.getvalue()
@@ -453,6 +595,12 @@ def outputs_panel() -> None:
         help="Bundles your source files and trained models into a single ZIP for sharing.",
     )
 
+    destinations = parse_destination_paths(st.session_state.get("output_destinations_text", ""))
+    if destinations:
+        st.caption("Optional destinations configured:")
+        for dest in destinations:
+            st.write(f"📌 {dest}")
+
     if not OUTPUT_DIR.exists():
         st.info("No output folder yet. Run a step first.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -464,11 +612,20 @@ def outputs_panel() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
+    exportable_suffixes = {".onnx", ".tflite", ".wav", ".yaml", ".pkl"}
+    exportable_files = [f for f in files if f.suffix.lower() in exportable_suffixes]
+    if destinations and exportable_files:
+        if st.button("📤 Copy exportable outputs to destinations", use_container_width=True):
+            for dest in destinations:
+                copied_count = copy_files_to_destination(exportable_files, dest)
+                st.success(f"Copied {copied_count} file(s) to: {dest}")
+
     _EXT_ICON = {
         ".onnx": "🧠",
         ".tflite": "📱",
         ".wav": "🔊",
         ".yaml": "⚙️",
+        ".pkl": "🧬",
         ".npy": "📊",
         ".pb": "🔗",
     }
@@ -479,7 +636,7 @@ def outputs_panel() -> None:
         with col1:
             st.write(f"{icon} {str(rel)}")
         with col2:
-            if file_path.suffix.lower() in {".onnx", ".tflite", ".wav", ".yaml"}:
+            if file_path.suffix.lower() in exportable_suffixes:
                 with open(file_path, "rb") as f:
                     st.download_button(
                         label="⬇️ Download",
