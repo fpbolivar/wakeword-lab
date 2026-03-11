@@ -1,0 +1,15 @@
+# Python cache and environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+
+# Project runtime folders (large/generated)
+third_party/
+data/
+output/
+config/my_model.yaml
+
+# macOS
+.DS_Store

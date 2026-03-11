@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wakeword-lab"
+version = "0.1.0"
+description = "Standalone wake-word training CLI built on openWakeWord"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "WakeWord Lab Contributors" }
+]
+dependencies = []
+
+[project.scripts]
+wakeword-lab = "train_voice:main"
+
+[tool.setuptools]
+py-modules = ["train_voice"]
