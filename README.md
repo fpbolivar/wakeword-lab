@@ -4,6 +4,22 @@ Train your own wake-word model with a clean, standalone workflow.
 
 This app is designed to be easy to publish and easy for others to run.
 
+## What's New In WakeWord Lab (2026 UI)
+
+- Full web UI app with presets, progress bars, and downloads
+- Health diagnostics tab for environment readiness checks
+- One-click publish ZIP export from the Outputs tab
+- Standalone CLI plus UI workflow in the same project
+
+## Launch In 30 Seconds
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+streamlit run ui_app.py
+```
+
 ## Why This Project Is Public-Friendly 🌍
 
 - ✅ Separate app folder and codebase
