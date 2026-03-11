@@ -1,8 +1,10 @@
 # WakeWord Lab 🎙️
 
-Train your own wake-word model with a clean, standalone workflow.
+**WakeWord Lab** is a professional wake-word model trainer with a full browser UI.
+Open it in your browser, type your wake phrase, pick a preset, and get a trained `.onnx` + `.tflite` model — no terminal commands required for everyday use.
 
-This app is designed to be easy to publish and easy for others to run.
+> 🖥️ **`ui_app.py`** — the WakeWord Lab web app **← start here**
+> 🖥️ **`train_voice.py`** — advanced CLI for terminal / scripting use only
 
 ## What's New In WakeWord Lab (2026 UI)
 
@@ -48,31 +50,41 @@ streamlit run ui_app.py
 - ✅ Open-source friendly project files
 - ✅ Reproducible commands and output locations
 
-## What This App Does ⚙️
+## Using the WakeWord Lab UI 🖥️
 
-`train_voice.py` provides three commands:
+Launch the app (`streamlit run ui_app.py`) and open it in your browser. You will see five tabs:
 
-1. `test-phrase` to generate a sample wake phrase WAV
-2. `prepare-data` to download training assets
-3. `train` to train and export `.onnx` and `.tflite` models
+| Tab | What it does |
+|-----|--------------|
+| 🎤 Phrase Lab | Test how your wake phrase sounds before training |
+| 📦 Data Setup | Download background audio and prepare the training dataset |
+| 🏋️ Training Lab | Configure settings, pick a preset, and run training |
+| 📁 Outputs | Download your trained `.onnx` / `.tflite` files and export a publish ZIP |
+| 🩺 Health | Verify all required tools, folders, and packages are installed |
+
+Training presets available as one-click buttons in the **Training** tab:
+
+| Preset | Samples | Steps | Best For |
+|--------|---------|-------|----------|
+| ⚡ Quick Smoke | 1,000 | 500 | Fast test to verify the pipeline works |
+| ⚖️ Balanced | 15,000 | 10,000 | Good personal wake-word model |
+| 🔒 High Robustness | 50,000 | 25,000 | Production quality, minimal false positives |
 
 ## Project Structure 📁
 
 ```text
 wakeword-lab/
-├── train_voice.py
-├── ui_app.py
-├── requirements.txt
+├── ui_app.py            ← WakeWord Lab web app  (primary — run this)
+├── train_voice.py       ← CLI training engine   (advanced / scripting only)
+├── requirements.txt     ← Python dependencies
 ├── README.md
 ├── LICENSE
-├── CONTRIBUTING.md
-├── CODE_OF_CONDUCT.md
-├── pyproject.toml
+├── pyproject.toml       ← package metadata and CLI entrypoint
 ├── .gitignore
-├── config/
-├── data/
-├── output/
-└── third_party/
+├── config/              ← generated training YAML configs
+├── data/                ← downloaded training assets
+├── output/              ← trained model files (.onnx, .tflite)
+└── third_party/         ← cloned openWakeWord + piper-sample-generator
 ```
 
 ## Quick Start 🚀
@@ -152,7 +164,7 @@ python -m pip install .
 wakeword-lab --help
 ```
 
-### 2.5) Launch the Modern UI App
+### 2.5) 🚀 Launch WakeWord Lab — the Web UI (primary interface)
 
 ```bash
 streamlit run ui_app.py
@@ -175,7 +187,15 @@ UI features:
 - 🗂️ One-click publish ZIP export for sharing your app
 - 🩺 Health tab with environment and dependency diagnostics
 
-### 3) Test your wake phrase sound
+---
+
+## Advanced: Terminal / CLI Use 🖥️
+
+> The commands below use `train_voice.py` directly from the terminal.
+> These are for power users, automation, and CI pipelines.
+> **Most users should use the WakeWord Lab UI (Step 2.5) instead.**
+
+### Test your wake phrase sound
 
 ```bash
 python train_voice.py test-phrase --target-word hey_att_la
@@ -224,6 +244,9 @@ Output files:
 - `output/hey_att_la.tflite`
 
 ## Suggested Presets 🧪
+
+> These same presets are available as **one-click buttons** in the 🏋️ Training tab of the WakeWord Lab UI.
+> Use the CLI commands below only if you prefer the terminal.
 
 Quick smoke test:
 

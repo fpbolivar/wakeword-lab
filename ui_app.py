@@ -123,19 +123,19 @@ def init_state() -> None:
 
 def preset_config(name: str) -> dict[str, int | str]:
     presets = {
-        "Quick Smoke": {
+        "⚡ Quick Smoke": {
             "n_samples": 1000,
             "steps": 500,
             "false_penalty": 300,
             "phrases_text": "hey_att_la",
         },
-        "Balanced": {
+        "⚖️ Balanced": {
             "n_samples": 15000,
             "steps": 10000,
             "false_penalty": 900,
             "phrases_text": "hey_att_la\nhey_at_luh\nhey_at_lah\nhey_aht_la",
         },
-        "High Robustness": {
+        "🔒 High Robustness": {
             "n_samples": 50000,
             "steps": 25000,
             "false_penalty": 1600,
@@ -155,59 +155,73 @@ def parse_phrases(text: str) -> list[str]:
 
 
 def sidebar(app: VoiceTrainerApp) -> None:
-    st.sidebar.header("Workspace")
-    st.sidebar.caption("Standalone training app")
-    st.sidebar.write(f"App folder: {APP_DIR}")
-    st.sidebar.write(f"Output folder: {app.output_dir}")
-    st.sidebar.write(f"Data folder: {app.data_dir}")
+    st.sidebar.header("🗂️ Workspace")
+    st.sidebar.caption("WakeWord Lab — standalone training app")
+    st.sidebar.write(f"📁 App: {APP_DIR}")
+    st.sidebar.write(f"📤 Output: {app.output_dir}")
+    st.sidebar.write(f"💾 Data: {app.data_dir}")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Safe Limits")
-    st.sidebar.write(f"n_samples: {app.N_SAMPLES_MIN} to {app.N_SAMPLES_MAX}")
-    st.sidebar.write(f"steps: {app.STEPS_MIN} to {app.STEPS_MAX}")
-    st.sidebar.write(f"false penalty: {app.FALSE_PENALTY_MIN} to {app.FALSE_PENALTY_MAX}")
+    st.sidebar.subheader("🛡️ Safe Limits")
+    st.sidebar.caption("Training inputs are clamped to these bounds:")
+    st.sidebar.write(f"📊 n_samples: {app.N_SAMPLES_MIN:,} – {app.N_SAMPLES_MAX:,}")
+    st.sidebar.write(f"⚙️ steps: {app.STEPS_MIN:,} – {app.STEPS_MAX:,}")
+    st.sidebar.write(f"🔇 false penalty: {app.FALSE_PENALTY_MIN:,} – {app.FALSE_PENALTY_MAX:,}")
 
 
 def health_panel(app: VoiceTrainerApp) -> None:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("System Health")
-    st.caption("Quick diagnostics to help users verify environment readiness.")
+    st.subheader("🩺 System Health")
+    st.caption("Check that all required tools, folders, and Python packages are installed before training.")
 
     checks = [
-        ("App directory", APP_DIR.exists(), str(APP_DIR)),
-        ("Output directory", app.output_dir.exists(), str(app.output_dir)),
-        ("Data directory", app.data_dir.exists(), str(app.data_dir)),
-        ("openwakeword repo", app.oww_repo.exists(), str(app.oww_repo)),
-        ("piper repo", app.piper_repo.exists(), str(app.piper_repo)),
+        ("📁 App directory", APP_DIR.exists(), str(APP_DIR)),
+        ("📤 Output directory", app.output_dir.exists(), str(app.output_dir)),
+        ("💾 Data directory", app.data_dir.exists(), str(app.data_dir)),
+        ("🤖 openWakeWord repo", app.oww_repo.exists(), str(app.oww_repo)),
+        ("🗣️ Piper TTS repo", app.piper_repo.exists(), str(app.piper_repo)),
     ]
 
     for label, ok, path in checks:
         if ok:
-            st.success(f"{label}: OK")
+            st.success(f"✅ {label}: found")
         else:
-            st.warning(f"{label}: Missing ({path})")
+            st.warning(f"⚠️ {label}: missing — expected at {path}")
 
-    import_checks = ["streamlit", "numpy", "scipy", "yaml", "librosa", "soundfile", "datasets"]
+    st.markdown("---")
+    import_checks = [
+        ("streamlit", "Streamlit web UI framework"),
+        ("numpy", "Numerical computing"),
+        ("scipy", "Signal processing"),
+        ("yaml", "Config file parsing"),
+        ("librosa", "Audio analysis"),
+        ("soundfile", "WAV file I/O"),
+        ("datasets", "HuggingFace datasets loader"),
+    ]
     import_results: list[str] = []
-    for pkg in import_checks:
+    for pkg, desc in import_checks:
         try:
             __import__(pkg)
-            import_results.append(f"{pkg}: OK")
+            import_results.append(f"✅  {pkg:<14} — {desc}")
         except Exception:
-            import_results.append(f"{pkg}: Missing")
+            import_results.append(f"❌  {pkg:<14} — {desc}  (pip install {pkg})")
 
-    st.write("Package checks:")
+    st.write("📦 Package checks:")
     st.code("\n".join(import_results), language="text")
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 def phrase_lab(app: VoiceTrainerApp) -> None:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("Phrase Lab")
-    st.caption("Generate and review a sample pronunciation before training.")
+    st.subheader("🎤 Phrase Lab")
+    st.caption("Test how your wake phrase sounds before committing to a full training run. Tweak the spelling until it sounds right.")
 
-    target_word = st.text_input("Target phrase", value="hey_att_la", help="Use phonetic style with underscores.")
-    generate = st.button("Generate Preview Audio", type="primary", use_container_width=True)
+    target_word = st.text_input(
+        "🎤 Target phrase",
+        value="hey_att_la",
+        help="Use phonetic spelling with underscores. e.g. 'hey_att_luh' or 'hey_aht_la'. Adjust until the preview sounds natural.",
+    )
+    generate = st.button("🔊 Generate Preview Audio", type="primary", use_container_width=True)
 
     if generate:
         progress = st.progress(0)
@@ -215,10 +229,10 @@ def phrase_lab(app: VoiceTrainerApp) -> None:
         try:
             app.ensure_dirs()
             progress.progress(20)
-            status.info("Loading TTS model")
+            status.info("⏳ Loading TTS model...")
             wav_path = app.generate_test_clip(target_word)
             progress.progress(100)
-            status.success("Preview generated")
+            status.success("✅ Preview ready — press play below")
             st.audio(str(wav_path))
             st.success(f"Saved: {wav_path}")
         except Exception as exc:
@@ -231,20 +245,21 @@ def phrase_lab(app: VoiceTrainerApp) -> None:
 
 def data_setup(app: VoiceTrainerApp) -> None:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("Data Setup")
-    st.caption("Prepare model assets and optional background datasets.")
+    st.subheader("📦 Data Setup")
+    st.caption("Download background audio and prepare the training dataset. Run this once before your first training session.")
 
     include_streaming_sets = st.checkbox(
-        "Include sample AudioSet + FMA clips (slower, better robustness)",
+        "📥 Include AudioSet + FMA background clips (slower download, better noise robustness)",
         value=False,
+        help="Adds ~2–4 GB of background audio. Recommended for a production-quality model.",
     )
 
-    prepare = st.button("Prepare Data", type="primary", use_container_width=True)
+    prepare = st.button("⬇️ Prepare Data", type="primary", use_container_width=True)
     if prepare:
         bar = st.progress(0)
         state = st.empty()
         try:
-            state.info("Starting data preparation")
+            state.info("📥 Downloading and preparing datasets...")
             bar.progress(10)
             app.prepare_data(include_streaming_sets=include_streaming_sets)
             bar.progress(100)
@@ -259,14 +274,18 @@ def data_setup(app: VoiceTrainerApp) -> None:
 
 def training_lab(app: VoiceTrainerApp) -> None:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("Training")
-    st.caption("Configure training, run model creation, and monitor stage progress.")
+    st.subheader("🏋️ Training Lab")
+    st.caption("Pick a preset or fine-tune the sliders, then hit Train Model to generate your .onnx and .tflite files.")
 
     preset_col, apply_col = st.columns([3, 1])
     with preset_col:
-        selected_preset = st.selectbox("Training preset", ["Quick Smoke", "Balanced", "High Robustness"])
+        selected_preset = st.selectbox(
+            "⚡ Training preset",
+            ["⚡ Quick Smoke", "⚖️ Balanced", "🔒 High Robustness"],
+            help="Quick Smoke: fast pipeline test (~2 min). Balanced: good personal model (~1 hr). High Robustness: production quality (~4+ hrs).",
+        )
     with apply_col:
-        if st.button("Apply Preset", use_container_width=True):
+        if st.button("✨ Apply Preset", use_container_width=True):
             cfg = preset_config(selected_preset)
             st.session_state.n_samples = int(cfg["n_samples"])
             st.session_state.steps = int(cfg["steps"])
@@ -276,9 +295,13 @@ def training_lab(app: VoiceTrainerApp) -> None:
 
     c1, c2 = st.columns(2)
     with c1:
-        model_name = st.text_input("Model name", key="model_name")
+        model_name = st.text_input(
+            "🏷️ Model name",
+            key="model_name",
+            help="Output files will be named after this. Use lowercase with underscores, e.g. hey_att_la",
+        )
         n_samples = st.slider(
-            "Number of synthetic samples",
+            "📊 Synthetic sample count",
             min_value=app.N_SAMPLES_MIN,
             max_value=app.N_SAMPLES_MAX,
             key="n_samples",
@@ -287,7 +310,7 @@ def training_lab(app: VoiceTrainerApp) -> None:
         )
     with c2:
         steps = st.slider(
-            "Training steps",
+            "⚙️ Training steps",
             min_value=app.STEPS_MIN,
             max_value=app.STEPS_MAX,
             key="steps",
@@ -295,7 +318,7 @@ def training_lab(app: VoiceTrainerApp) -> None:
             help="More steps generally improve fit but increase runtime.",
         )
         false_penalty = st.slider(
-            "False activation penalty",
+            "🔇 False activation penalty",
             min_value=app.FALSE_PENALTY_MIN,
             max_value=app.FALSE_PENALTY_MAX,
             key="false_penalty",
@@ -304,20 +327,20 @@ def training_lab(app: VoiceTrainerApp) -> None:
         )
 
     st.text_area(
-        "Target phrase variants (one phrase per line)",
+        "📝 Phrase variants (one per line)",
         key="phrases_text",
         height=120,
-        help="You can add as many phrase variants as you want.",
+        help="Add multiple phonetic spellings so the model learns different pronunciations. One phrase per line.",
     )
 
     phrases = parse_phrases(st.session_state.phrases_text)
-    st.write("Active variants:")
+    st.write("🏷️ Active variants:")
     if phrases:
         st.markdown("".join(f'<span class="pill">{p}</span>' for p in phrases), unsafe_allow_html=True)
     else:
         st.warning("Add at least one phrase variant.")
 
-    run_training = st.button("Train Model", type="primary", use_container_width=True)
+    run_training = st.button("🚀 Train Model", type="primary", use_container_width=True)
     if run_training:
         if not phrases:
             st.error("At least one target phrase is required.")
@@ -382,17 +405,18 @@ def build_publish_zip() -> bytes:
 
 def outputs_panel() -> None:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("Outputs")
-    st.caption("Browse generated files and download artifacts.")
+    st.subheader("📁 Outputs")
+    st.caption("Download your trained model files or export a shareable publish ZIP.")
 
     package_data = build_publish_zip()
     package_name = f"wakeword_lab_publish_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
     st.download_button(
-        label="Create Publish ZIP",
+        label="📦 Create Publish ZIP",
         data=package_data,
         file_name=package_name,
         mime="application/zip",
         use_container_width=True,
+        help="Bundles your source files and trained models into a single ZIP for sharing.",
     )
 
     if not OUTPUT_DIR.exists():
@@ -406,16 +430,25 @@ def outputs_panel() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
+    _EXT_ICON = {
+        ".onnx": "🧠",
+        ".tflite": "📱",
+        ".wav": "🔊",
+        ".yaml": "⚙️",
+        ".npy": "📊",
+        ".pb": "🔗",
+    }
     for file_path in files:
         rel = file_path.relative_to(APP_DIR)
+        icon = _EXT_ICON.get(file_path.suffix.lower(), "📄")
         col1, col2 = st.columns([4, 1])
         with col1:
-            st.write(str(rel))
+            st.write(f"{icon} {str(rel)}")
         with col2:
             if file_path.suffix.lower() in {".onnx", ".tflite", ".wav", ".yaml"}:
                 with open(file_path, "rb") as f:
                     st.download_button(
-                        label="Download",
+                        label="⬇️ Download",
                         data=f,
                         file_name=file_path.name,
                         key=f"download_{str(rel)}",
@@ -449,7 +482,7 @@ def main() -> None:
 
     sidebar(app)
 
-    t1, t2, t3, t4, t5 = st.tabs(["Phrase Lab", "Data Setup", "Training", "Outputs", "Health"])
+    t1, t2, t3, t4, t5 = st.tabs(["🎤 Phrase Lab", "📦 Data Setup", "🏋️ Training", "📁 Outputs", "🩺 Health"])
     with t1:
         phrase_lab(app)
     with t2:
