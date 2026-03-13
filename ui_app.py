@@ -120,6 +120,14 @@ def init_state() -> None:
         st.session_state.steps = 3000
     if "false_penalty" not in st.session_state:
         st.session_state.false_penalty = 600
+    if "runtime_threshold" not in st.session_state:
+        st.session_state.runtime_threshold = VoiceTrainerApp.RUNTIME_THRESHOLD_DEFAULT
+    if "runtime_profile_model" not in st.session_state:
+        st.session_state.runtime_profile_model = ""
+    if "runtime_profile_threshold" not in st.session_state:
+        st.session_state.runtime_profile_threshold = VoiceTrainerApp.RUNTIME_THRESHOLD_DEFAULT
+    if "runtime_profile_loaded_model" not in st.session_state:
+        st.session_state.runtime_profile_loaded_model = ""
     if "device_choice" not in st.session_state:
         st.session_state.device_choice = "auto"
     if "output_destinations_text" not in st.session_state:
@@ -179,6 +187,34 @@ def parse_destination_paths(text: str) -> list[Path]:
         if path not in destinations:
             destinations.append(path)
     return destinations
+
+
+def runtime_profile_path(model_name: str) -> Path:
+    return OUTPUT_DIR / f"{Path(model_name).stem}_runtime.yaml"
+
+
+def load_runtime_profile_threshold(model_name: str) -> float | None:
+    profile_path = runtime_profile_path(model_name)
+    if not profile_path.exists():
+        return None
+
+    try:
+        import yaml
+
+        data = yaml.safe_load(profile_path.read_text()) or {}
+    except Exception:
+        return None
+
+    value = data.get("runtime_threshold")
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def list_trained_model_names() -> list[str]:
+    if not OUTPUT_DIR.exists():
+        return []
+    return sorted(path.stem for path in OUTPUT_DIR.glob("*.onnx"))
 
 
 def resolve_user_path(path_text: str) -> Path:
@@ -444,6 +480,19 @@ def training_lab(app: VoiceTrainerApp) -> None:
             help="Higher values reduce false positives, but may reduce recall.",
         )
 
+    runtime_threshold = st.number_input(
+        "🎚️ Runtime activation threshold",
+        key="runtime_threshold",
+        step=0.05,
+        format="%.2f",
+        min_value=VoiceTrainerApp.RUNTIME_THRESHOLD_MIN,
+        max_value=VoiceTrainerApp.RUNTIME_THRESHOLD_MAX,
+        help=(
+            "Detection score used when the trained model runs in a listener app or terminal script. "
+            "This is saved with the model output and does not change training."
+        ),
+    )
+
     st.text_area(
         "📝 Phrase variants (one per line)",
         key="phrases_text",
@@ -497,6 +546,7 @@ def training_lab(app: VoiceTrainerApp) -> None:
                 n_samples=n_samples,
                 steps=steps,
                 false_activation_penalty=false_penalty,
+                runtime_threshold=float(runtime_threshold),
                 device=st.session_state.get("device_choice", "auto"),
                 progress_callback=cb,
             )
@@ -510,6 +560,7 @@ def training_lab(app: VoiceTrainerApp) -> None:
                     OUTPUT_DIR / f"{model_base}.onnx",
                     OUTPUT_DIR / f"{model_base}.tflite",
                     OUTPUT_DIR / f"{model_base}_float16.tflite",
+                    OUTPUT_DIR / f"{model_base}_runtime.yaml",
                 ]
                 export_files = [p for p in export_files if p.exists()]
                 if export_files:
@@ -703,12 +754,27 @@ def personal_voice_lab(app: VoiceTrainerApp) -> None:
             )
             st.success(f"Personal verifier created: {verifier_output}")
 
+            current_model_name = st.session_state.get("model_name", "").strip()
+            if current_model_name:
+                app.save_runtime_profile(
+                    model_name=current_model_name,
+                    runtime_threshold=float(
+                        st.session_state.get("runtime_threshold", VoiceTrainerApp.RUNTIME_THRESHOLD_DEFAULT)
+                    ),
+                )
+
             destinations = parse_destination_paths(st.session_state.get("output_destinations_text", ""))
             if st.session_state.get("auto_copy_outputs", False) and destinations:
+                verifier_exports = [verifier_output]
+                current_model_name = st.session_state.get("model_name", "").strip()
+                if current_model_name:
+                    runtime_profile = runtime_profile_path(current_model_name)
+                    if runtime_profile.exists():
+                        verifier_exports.append(runtime_profile)
                 for dest in destinations:
-                    copied_count = copy_files_to_destination([verifier_output], dest)
+                    copied_count = copy_files_to_destination(verifier_exports, dest)
                     if copied_count:
-                        st.success(f"Copied personalized verifier to: {dest}")
+                        st.success(f"Copied personalized verifier assets to: {dest}")
         except Exception as exc:
             st.error("Personal verifier training failed")
             st.error(str(exc))
@@ -744,12 +810,14 @@ def build_publish_zip() -> bytes:
                 zf.write(model_file, arcname=model_file.relative_to(APP_DIR))
             for model_file in OUTPUT_DIR.glob("*.pkl"):
                 zf.write(model_file, arcname=model_file.relative_to(APP_DIR))
+            for model_file in OUTPUT_DIR.glob("*_runtime.yaml"):
+                zf.write(model_file, arcname=model_file.relative_to(APP_DIR))
 
     buf.seek(0)
     return buf.getvalue()
 
 
-def outputs_panel() -> None:
+def outputs_panel(app: VoiceTrainerApp) -> None:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📁 Outputs")
     st.caption("Download your trained model files or export a shareable publish ZIP.")
@@ -781,6 +849,77 @@ def outputs_panel() -> None:
         st.info("No output files yet.")
         st.markdown("</div>", unsafe_allow_html=True)
         return
+
+    st.markdown("---")
+    st.subheader("🎚️ Runtime Threshold")
+    st.caption("Save or update the detection threshold used when the trained model runs in your terminal or app.")
+
+    model_names = list_trained_model_names()
+    if model_names:
+        current_model_name = st.session_state.get("model_name", "").strip()
+        if current_model_name in model_names:
+            default_index = model_names.index(current_model_name)
+        else:
+            default_index = 0
+
+        if st.session_state.get("runtime_profile_model") not in model_names:
+            st.session_state.runtime_profile_model = model_names[default_index]
+
+        selected_runtime_model = st.selectbox(
+            "Select trained model",
+            model_names,
+            index=default_index,
+            key="runtime_profile_model",
+        )
+
+        if st.session_state.get("runtime_profile_loaded_model") != selected_runtime_model:
+            existing_threshold = load_runtime_profile_threshold(selected_runtime_model)
+            st.session_state.runtime_profile_threshold = (
+                existing_threshold
+                if existing_threshold is not None
+                else VoiceTrainerApp.RUNTIME_THRESHOLD_DEFAULT
+            )
+            st.session_state.runtime_profile_loaded_model = selected_runtime_model
+
+        runtime_profile_threshold = st.number_input(
+            "Runtime activation threshold",
+            key="runtime_profile_threshold",
+            step=0.05,
+            format="%.2f",
+            min_value=VoiceTrainerApp.RUNTIME_THRESHOLD_MIN,
+            max_value=VoiceTrainerApp.RUNTIME_THRESHOLD_MAX,
+            help="Lower values trigger more easily. Higher values are stricter.",
+        )
+
+        if st.button("💾 Save Runtime Threshold", use_container_width=True):
+            try:
+                saved_profile = app.save_runtime_profile(
+                    model_name=selected_runtime_model,
+                    runtime_threshold=float(runtime_profile_threshold),
+                )
+                st.session_state.runtime_threshold = float(runtime_profile_threshold)
+                st.success(f"Saved runtime profile: {saved_profile}")
+            except Exception as exc:
+                st.error(str(exc))
+
+        selected_model_path = OUTPUT_DIR / f"{selected_runtime_model}.onnx"
+        st.code(
+            "\n".join(
+                [
+                    "from openwakeword.model import Model",
+                    "",
+                    f"model = Model(wakeword_models=[r\"{selected_model_path}\"])",
+                    f"threshold = {float(runtime_profile_threshold):.2f}",
+                    "",
+                    "scores = model.predict(audio_chunk)",
+                    f"if scores[\"{selected_runtime_model}\"] >= threshold:",
+                    "    print(\"wake word detected\")",
+                ]
+            ),
+            language="python",
+        )
+    else:
+        st.info("Train a model first to save a runtime threshold profile.")
 
     exportable_suffixes = {".onnx", ".tflite", ".wav", ".yaml", ".pkl"}
     exportable_files = [f for f in files if f.suffix.lower() in exportable_suffixes]
@@ -853,7 +992,7 @@ def main() -> None:
     with t4:
         personal_voice_lab(app)
     with t5:
-        outputs_panel()
+        outputs_panel(app)
     with t6:
         health_panel(app)
 

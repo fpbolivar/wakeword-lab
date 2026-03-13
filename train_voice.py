@@ -30,6 +30,9 @@ class VoiceTrainerApp:
     STEPS_MAX = 100000
     FALSE_PENALTY_MIN = 100
     FALSE_PENALTY_MAX = 5000
+    RUNTIME_THRESHOLD_DEFAULT = 0.5
+    RUNTIME_THRESHOLD_MIN = 0.0
+    RUNTIME_THRESHOLD_MAX = 1.0
 
     @staticmethod
     def estimate_training_time(
@@ -404,12 +407,14 @@ class VoiceTrainerApp:
         n_samples: int,
         steps: int,
         false_activation_penalty: int,
+        runtime_threshold: float = RUNTIME_THRESHOLD_DEFAULT,
         device: str = "auto",
         progress_callback: Callable[[float, str], None] | None = None,
     ) -> None:
         import yaml
 
         self._validate_training_inputs(target_phrases, n_samples, steps, false_activation_penalty)
+        self._validate_runtime_threshold(runtime_threshold)
 
         if progress_callback:
             progress_callback(0.02, "Preparing training environment")
@@ -430,6 +435,7 @@ class VoiceTrainerApp:
         config["n_samples"] = n_samples
         config["n_samples_val"] = max(500, n_samples // 10)
         config["steps"] = steps
+        config["target_false_positives_per_hour"] = 0.2
         config["target_accuracy"] = 0.5
         config["target_recall"] = 0.25
         config["output_dir"] = str(self.output_dir)
@@ -496,9 +502,15 @@ class VoiceTrainerApp:
 
         onnx_file = self.output_dir / f"{model_name}.onnx"
         tflite_file = self.output_dir / f"{model_name}.tflite"
+        runtime_profile = self.save_runtime_profile(
+            model_name=model_name,
+            runtime_threshold=runtime_threshold,
+            target_phrases=target_phrases,
+        )
 
         print(f"Created model: {onnx_file}")
         print(f"Created model: {tflite_file}")
+        print(f"Created runtime profile: {runtime_profile}")
         if progress_callback:
             progress_callback(1.0, "Training complete")
 
@@ -585,6 +597,40 @@ class VoiceTrainerApp:
                 f"false_activation_penalty must be between {self.FALSE_PENALTY_MIN} and {self.FALSE_PENALTY_MAX}."
             )
 
+    def _validate_runtime_threshold(self, runtime_threshold: float) -> None:
+        if not (self.RUNTIME_THRESHOLD_MIN <= runtime_threshold <= self.RUNTIME_THRESHOLD_MAX):
+            raise ValueError(
+                f"runtime_threshold must be between {self.RUNTIME_THRESHOLD_MIN} and {self.RUNTIME_THRESHOLD_MAX}."
+            )
+
+    def save_runtime_profile(
+        self,
+        model_name: str,
+        runtime_threshold: float,
+        target_phrases: list[str] | None = None,
+    ) -> Path:
+        import yaml
+
+        self.ensure_dirs()
+        self._validate_runtime_threshold(runtime_threshold)
+
+        model_stem = Path(model_name).stem
+        runtime_profile = self.output_dir / f"{model_stem}_runtime.yaml"
+        verifier_file = self.output_dir / f"{model_stem}_verifier.pkl"
+
+        profile = {
+            "model_name": model_stem,
+            "model_file": f"{model_stem}.onnx",
+            "runtime_threshold": float(runtime_threshold),
+        }
+        if target_phrases:
+            profile["target_phrases"] = [phrase.strip() for phrase in target_phrases if phrase.strip()]
+        if verifier_file.exists():
+            profile["verifier_file"] = verifier_file.name
+
+        runtime_profile.write_text(yaml.safe_dump(profile, sort_keys=False))
+        return runtime_profile
+
     def _convert_to_tflite(self, model_name: str) -> None:
         onnx_file = self.output_dir / f"{model_name}.onnx"
         float32_file = self.output_dir / f"{model_name}_float32.tflite"
@@ -639,6 +685,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_train.add_argument("--n-samples", type=int, default=5000)
     p_train.add_argument("--steps", type=int, default=3000)
     p_train.add_argument("--false-activation-penalty", type=int, default=600)
+    p_train.add_argument(
+        "--runtime-threshold",
+        type=float,
+        default=VoiceTrainerApp.RUNTIME_THRESHOLD_DEFAULT,
+        help=(
+            "Runtime activation threshold saved with the trained model for deployment use. "
+            "Must be between 0.0 and 1.0 and does not change training itself."
+        ),
+    )
 
     return parser
 
@@ -667,6 +722,7 @@ def main() -> None:
             n_samples=args.n_samples,
             steps=args.steps,
             false_activation_penalty=args.false_activation_penalty,
+            runtime_threshold=args.runtime_threshold,
         )
 
 

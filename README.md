@@ -182,6 +182,7 @@ UI features:
 - 🎛️ Safe sliders with min/max training limits
 - 🧾 Add as many phrase variants as you want (one per line)
 - ⚡ One-click training presets (Quick Smoke, Balanced, High Robustness)
+- 🎚️ Runtime threshold editor with saved deployment profile
 - 🎧 Generate preview audio button
 - ⏳ Stage-based loading/progress bars for long operations
 - 🧬 Dedicated Personal Voice tab with microphone capture, WAV import, autofill paths, and readiness checks
@@ -284,7 +285,8 @@ python train_voice.py train \
   --target-phrases hey_seere hey_seeri hey_seeree hey_syree \
   --n-samples 5000 \
   --steps 3000 \
-  --false-activation-penalty 600
+  --false-activation-penalty 600 \
+  --runtime-threshold 0.50
 ```
 
 Training argument bounds:
@@ -292,11 +294,15 @@ Training argument bounds:
 - `n_samples`: 100 to 200000
 - `steps`: 100 to 100000
 - `false_activation_penalty`: 100 to 5000
+- `runtime_threshold`: 0.0 to 1.0
 
 Output files:
 
 - `output/hey_seere.onnx`
 - `output/hey_seere.tflite`
+- `output/hey_seere_runtime.yaml`
+
+The runtime threshold is a deployment setting for the listener app or terminal script. It does not change training itself.
 
 ## Suggested Presets 🧪
 
@@ -306,19 +312,19 @@ Output files:
 Quick smoke test:
 
 ```bash
-python train_voice.py train --model-name hey_seere --target-phrases hey_seere --n-samples 1000 --steps 500 --false-activation-penalty 300
+python train_voice.py train --model-name hey_seere --target-phrases hey_seere --n-samples 1000 --steps 500 --false-activation-penalty 300 --runtime-threshold 0.50
 ```
 
 Balanced personal model:
 
 ```bash
-python train_voice.py train --model-name hey_seere --target-phrases hey_seere hey_seeri hey_seeree hey_syree --n-samples 15000 --steps 10000 --false-activation-penalty 900
+python train_voice.py train --model-name hey_seere --target-phrases hey_seere hey_seeri hey_seeree hey_syree --n-samples 15000 --steps 10000 --false-activation-penalty 900 --runtime-threshold 0.50
 ```
 
 High robustness model:
 
 ```bash
-python train_voice.py train --model-name hey_seere --target-phrases hey_seere hey_seeri hey_seeree hey_syree --n-samples 50000 --steps 25000 --false-activation-penalty 1600
+python train_voice.py train --model-name hey_seere --target-phrases hey_seere hey_seeri hey_seeree hey_syree --n-samples 50000 --steps 25000 --false-activation-penalty 1600 --runtime-threshold 0.50
 ```
 
 ## Requirements and Notes 🧩
